@@ -25,14 +25,15 @@ import struct
 import logging
 import traceback
 import random
+import fastopen
 
 from shadowsocks import encrypt, eventloop, shell, common
 from shadowsocks.common import parse_header
 
+TCP_FASTOPEN = 0x105
+
 # we clear at most TIMEOUTS_CLEAN_SIZE timeouts each time
 TIMEOUTS_CLEAN_SIZE = 512
-
-MSG_FASTOPEN = 0x20000000
 
 # SOCKS command definition
 CMD_CONNECT = 1
@@ -239,7 +240,9 @@ class TCPRelayHandler(object):
                 self._loop.add(remote_sock, eventloop.POLL_ERR, self._server)
                 data = b''.join(self._data_to_write_to_remote)
                 l = len(data)
-                s = remote_sock.sendto(data, MSG_FASTOPEN, self._chosen_server)
+                fastopen.connect(remote_sock.fileno(), *self._chosen_server)
+                s = remote_sock.send(data)
+
                 if s < l:
                     data = data[s:]
                     self._data_to_write_to_remote = [data]
@@ -581,13 +584,14 @@ class TCPRelay(object):
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind(sa)
         server_socket.setblocking(False)
+        server_socket.listen(1024)
         if config['fast_open']:
             try:
-                server_socket.setsockopt(socket.SOL_TCP, 23, 5)
-            except socket.error:
+                server_socket.setsockopt(socket.SOL_TCP, TCP_FASTOPEN, 1)
+            except socket.error as e:
+                print(e)
                 logging.error('warning: fast open is not available')
                 self._config['fast_open'] = False
-        server_socket.listen(1024)
         self._server_socket = server_socket
         self._stat_callback = stat_callback
 
