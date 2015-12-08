@@ -240,7 +240,7 @@ class TCPRelayHandler(object):
                 self._loop.add(remote_sock, eventloop.POLL_ERR, self._server)
                 data = b''.join(self._data_to_write_to_remote)
                 l = len(data)
-                fastopen.connect(remote_sock.fileno(), *self._chosen_server)
+                fastopen.connect(remote_sock.fileno(), self._chosen_server[0], str(self._chosen_server[1]))
                 s = remote_sock.send(data)
 
                 if s < l:
